@@ -13,26 +13,37 @@ public class Game {
 
     private final String clientId;
     private final Map<Integer, Integer[]> movements;
+    private final Map<Integer, Integer> oppositeDirection;
 
-    private List<Position> previousPos;
+
+    private List<Position> previousPositionList;
 
     private final Client client;
 
     private boolean botRunning;
     private Map<String, String> player;
 
-    private final Position currPos;
+    private final Position currentPosition;
+
+    private int historyIndex;
+    private int delay;
 
     public Game() {
         clientId = "WeAreTheVoidResistenceIsFutile";
-
-        previousPos = new ArrayList<>();
+        historyIndex = 0;
+        previousPositionList = new ArrayList<>();
 
         movements = new HashMap<>();
         movements.put(0, new Integer[]{1, 0, 0, 0});
         movements.put(1, new Integer[]{0, 1, 0, 0});
         movements.put(2, new Integer[]{0, 0, 1, 0});
         movements.put(3, new Integer[]{0, 0, 0, 1});
+
+        oppositeDirection = new HashMap<>();
+        oppositeDirection.put(0, 2);
+        oppositeDirection.put(1, 3);
+        oppositeDirection.put(2, 0);
+        oppositeDirection.put(3, 1);
 
         botRunning = true;
 
@@ -41,8 +52,8 @@ public class Game {
                 .encoder(new GsonEncoder())
                 .target(Client.class, "https://dojomaze-api.maas.codes");
 
-        currPos = new Position();
-        previousPos.add(new Position());
+        currentPosition = new Position();
+        previousPositionList.add(new Position());
     }
 
     @SneakyThrows
@@ -68,57 +79,70 @@ public class Game {
                 }
             }
 
-            System.out.println(String.format("Status %s", status));
+            //System.out.println(String.format("Status %s", status));
 
             final var wallDistances = status.getWallDistances();
 
-
-            // ---xppp
-            // nnn-nnn
-
-            // new Position(wallDistances.toArray(new Integer[wallDistances.size() - 1]), currPos);
-            final var posibilities = createFuturePositions(currPos);
-
-            final var actualPosibilities = posibilities.stream().filter(posibility ->
-                    previousPos.stream().noneMatch(prevPos ->
-                            (prevPos.getX() == posibility.getX() && prevPos.getY() == posibility.getY())
-                    )
-            ).collect(Collectors.toList());
-
             final List<Integer[]> wallDistList = new ArrayList<>();
-
             wallDistList.add(new Integer[]{0, wallDistances.get(0)});
             wallDistList.add(new Integer[]{1, wallDistances.get(1)});
             wallDistList.add(new Integer[]{2, wallDistances.get(2)});
             wallDistList.add(new Integer[]{3, wallDistances.get(3)});
 
-            // can fail due to null options for actualPosibilities
-            final var nextDirection = wallDistList.stream()
-                    .filter(wallDistance -> wallDistance[1] > 0)
-                    .filter(walld ->
-                            actualPosibilities.stream().anyMatch(position -> position.getDir() == walld[0])
-                    ).map(w -> w[0]).findAny();
+            // new Position(wallDistances.toArray(new Integer[wallDistances.size() - 1]), currPos);
+            final var possibilities = createFuturePositions(currentPosition);
+
+            final var actualPossibilities = possibilities.stream().filter(possibility ->
+                    previousPositionList.stream().noneMatch(prevPos -> prevPos.isSame(possibility))
+            ).filter((poss) ->
+                    wallDistList.stream().anyMatch((wallDist) -> wallDist[1] > 0 && wallDist[0] == poss.getDir())
+            ).collect(Collectors.toList());
+
+
+            actualPossibilities.stream()
+                    .map(Position::getDir)
+                    .map(Object::toString)
+                    .reduce((acc, value) -> acc += " " + value).ifPresent(positions ->
+                    System.out.printf("Possible directions: (%s)%n", positions)
+            );
+
+            Collections.shuffle(actualPossibilities);
+            final var nextDirection = actualPossibilities.stream().findFirst();
 
             nextDirection.ifPresentOrElse(next -> {
-                        currPos.set(movements.get(next));
-                        previousPos.add(new Position(currPos.getX(), currPos.getY(), 0));
+                        historyIndex = 2;
+                        currentPosition.set(movements.get(next.getDir()));
+                        currentPosition.setDir(next.getDir());
+
+                        previousPositionList.add(new Position(currentPosition.getX(), currentPosition.getY(), currentPosition.getDir()));
 
                         final var directionRequest = new HashMap<String, Object>();
                         directionRequest.put("playerId", player.get("playerId"));
-                        directionRequest.put("direction", next);
+                        directionRequest.put("direction", next.getDir());
 
-                        System.out.println(String.format("Move to %d", next));
-                        final var delayInMilli = client.move(directionRequest).get("frameTimeMilliseconds");
-                        System.out.println(String.format("Sleep %d", delayInMilli));
-
-
+                        System.out.printf("Move to %d%n", next.getDir());
+                        delay = client.move(directionRequest).get("frameTimeMilliseconds");
+                        //System.out.println(String.format("Sleep %d", delayInMilli));
                     }
                     , () -> {
-                        System.out.println("Removing 2 last positions");
-                        previousPos = previousPos.subList(0, previousPos.size() - 2);
-                        previousPos.add(currPos);
+
+                        final var prevPos = previousPositionList.get(previousPositionList.size() - historyIndex);
+
+                        final var oppositeDir = oppositeDirection.get(prevPos.getDir());
+                        currentPosition.setDir(oppositeDir);
+                        currentPosition.setX(prevPos.getX());
+                        currentPosition.setY(prevPos.getY());
+
+                        System.out.printf("Moving to history position. direction: (%d)%n", oppositeDir);
+                        final var directionRequest = new HashMap<String, Object>();
+                        directionRequest.put("playerId", player.get("playerId"));
+                        directionRequest.put("direction", oppositeDir);
+                        delay = client.move(directionRequest).get("frameTimeMilliseconds");
+
+                        //System.out.println(String.format("Sleep %d", delayInMilli));
+                        historyIndex++;
                     });
-            Thread.sleep(3000);
+            Thread.sleep(delay);
 
         }
     }

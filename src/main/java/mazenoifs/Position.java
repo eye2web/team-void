@@ -32,4 +32,8 @@ public class Position {
         y += dir[2];
     }
 
+    public boolean isSame(Position comparePos) {
+        return x == comparePos.getX() && y == comparePos.getY();
+    }
+
 }
