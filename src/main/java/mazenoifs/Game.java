@@ -8,6 +8,7 @@ import mazenoifs.helper.MovementHelper;
 import mazenoifs.actions.Action;
 import mazenoifs.actions.MovementAction;
 import mazenoifs.position.Coordinate;
+import mazenoifs.position.Position;
 import mazenoifs.position.TraveledPosition;
 
 import java.util.*;
@@ -21,6 +22,7 @@ public class Game {
     public static Map<String, String> player;
 
 
+    private final List<TraveledPosition> positionList;
     private TraveledPosition currentPosition;
 
     public Game() {
@@ -28,6 +30,8 @@ public class Game {
                 .decoder(new GsonDecoder())
                 .encoder(new GsonEncoder())
                 .target(Client.class, "https://dojomaze-api.maas.codes");
+
+        positionList = new ArrayList<>();
     }
 
     public void start() {
@@ -41,7 +45,7 @@ public class Game {
 
         final var status = ClientHelper.getStatus();
         currentPosition = new TraveledPosition(new Coordinate(0, 0), status.getWallDistances());
-
+        positionList.add(currentPosition);
         while (true) {
             executeActions(updateActions());
         }
@@ -60,10 +64,16 @@ public class Game {
 
             final var newCoordinate = new Coordinate(currentPosition.getCoordinate().getX(), currentPosition.getCoordinate().getY());
             newCoordinate.recalculate(action.getKey());
-            final var newPosition = new TraveledPosition(newCoordinate, status.getWallDistances());
-            currentPosition.addPosition(newPosition, action.getKey());
 
-            currentPosition = newPosition;
+            currentPosition = positionList.stream()
+                    .filter(p -> p.getCoordinate().equals(newCoordinate))
+                    .findFirst()
+                    .orElseGet(() -> {
+                        final var newPosition = new TraveledPosition(newCoordinate, status.getWallDistances());
+                        currentPosition.addPosition(newPosition, action.getKey());
+                        newPosition.addPosition(currentPosition, MovementHelper.OPPOSITE_DIRECTIONS.get(action.getKey()));
+                        return newPosition;
+                    });
         });
     }
 

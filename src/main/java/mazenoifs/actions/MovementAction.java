@@ -21,7 +21,7 @@ public class MovementAction implements Action {
         System.out.printf("Moving into %d direction%n", direction);
 
         try {
-            Thread.sleep(delay);
+            Thread.sleep(delay + 500);
         } catch (InterruptedException ex) {
             System.out.println(ex.getLocalizedMessage());
         }

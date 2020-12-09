@@ -31,23 +31,24 @@ public class TraveledPosition implements Position {
     }
 
     public void addPosition(final TraveledPosition traveledPosition, final MovementHelper.DIRECTION direction) {
-        traveledPosition.addPosition(this, MovementHelper.OPPOSITE_DIRECTIONS.get(direction));
         positions.replace(direction, traveledPosition);
     }
 
     public List<List<MovementHelper.DIRECTION>> getNextDirectionSequences() {
+
         return positions.entrySet().stream()
                 .map((set) -> {
                     final var d = new ArrayList<MovementHelper.DIRECTION>();
                     set.getValue().getNextDirections(set.getKey(), this, d);
                     return d;
                 })
-                .sorted((p, n) -> p.size() > n.size() ? 1 : 0)
+                .filter(l -> l.size() > 0)
+                .sorted(Comparator.comparing(ArrayList::size))
                 .collect(Collectors.toList());
     }
 
     public void getNextDirections(final MovementHelper.DIRECTION direction, final Position prevPosition, final List<MovementHelper.DIRECTION> directions) {
-
+        // TODO Create a graph instead of a list. We are losing to much information
         final var sequences = positions.entrySet().stream()
                 .filter(s -> s.getKey() != MovementHelper.OPPOSITE_DIRECTIONS.get(direction))
                 .map((set) -> {
@@ -56,9 +57,11 @@ public class TraveledPosition implements Position {
                     set.getValue().getNextDirections(set.getKey(), this, d);
                     return d;
                 })
-                .sorted((p, n) -> p.size() > n.size() ? 1 : 0)
+                .sorted(Comparator.comparing(ArrayList::size))
                 .collect(Collectors.toList());
 
+        // TODO look into selection of the right sequences
+        Collections.reverse(sequences);
         directions.addAll(sequences.get(0));
     }
 
